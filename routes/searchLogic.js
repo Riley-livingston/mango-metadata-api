@@ -1,9 +1,7 @@
 const express = require("express");
 const router = express.Router();
 const mysql = require('mysql'); // Import the mysql module
-
-// Import the database pool from index.js
-const pool = require("./index").pool;
+const { pool } = require("../utils/database"); // Updated import
 
 router.get("/search", async (req, res) => {
   const searchTerm = req.query.term;

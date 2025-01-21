@@ -1,8 +1,7 @@
 const express = require("express");
 const router = express.Router();
+const { pool } = require("../utils/database"); // Updated import
 
-// Import the database pool from index.js
-const pool = require("./index").pool;
 
 // Endpoint to create a set
 router.post("/create_set", (req, res) => {

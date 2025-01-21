@@ -16,22 +16,23 @@ app.use('/card-metadata', require('./routes/cardMetadata'));
 app.use('/price-retrieval', require('./routes/priceRetrieval'));
 app.use('/search-routes', require('./routes/searchLogic'));
 app.use('/user-sets', require('./routes/userSets'));
+app.use('/scraping', require('./routes/scrapingRoutes'));
 
 // Error handling
 app.use(errorHandler);
 
-// Database connection test
+// Start server first
+app.listen(port, '0.0.0.0', () => {
+  console.log(`Server running on port ${port}`);
+});
+
+// Attempt database connection after server is running
 getConnection()
   .then((connection) => {
     connection.release();
     console.log('Database connected successfully');
-    
-    // Start server
-    app.listen(port, '0.0.0.0', () => {
-      console.log(`Server running on port ${port}`);
-    });
   })
   .catch((err) => {
-    console.error('Database connection failed:', err);
-    process.exit(1);
+    console.warn('Database connection failed:', err.message);
+    console.log('Server continuing to run without database functionality');
   });

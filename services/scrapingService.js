@@ -1,216 +1,106 @@
 const puppeteer = require('puppeteer');
 const { AppError } = require('../middleware/errorHandler');
 
-// Constants for eBay search parameters
-const EBAY_CONFIG = {
-  BASE_URL: "https://www.ebay.com/sch/i.html?_from=R40",
-  CATEGORY: "&_sacat=183454",
-  TITLE_DESC: "&LH_TitleDesc=1",
-  RT: "&rt=nc",
-  SOLD_COMPLETE: "&LH_Sold=1&LH_Complete=1",
-  DEFAULT_EXCLUSIONS: [
-    "Graded", "Grade", "PGO", "CGC", "BGS", "PSA",
-    "Pick", "Singles", "Choose", "Sealed",
-    "Korean", "italian", "german", "signed", "Gem"
-  ]
-};
-
-class CardDataParser {
-  static determineCardboardType(title) {
-    const lowerTitle = this._normalizeTitle(title);
-    
-    // Check for explicit non-holo mentions
-    if (this._containsAny(lowerTitle, ['nonholo', 'non holo'])) {
-      return 'Normal';
-    }
-
-    // Check for reverse holo
-    if (this._containsAny(lowerTitle, ['reverse', 'rev holo'])) {
-      return 'Reverse';
-    }
-
-    // Check for special card types
-    const specialPatterns = [
-      'vmax', 'rainbow', 'illustration', 'secret rare', 'secret',
-      'double rare', 'lvx', 'art rare', 'shiny rare', 'full art',
-      'prism rare', 'Hyper Rare', 'SAR', 'SIR', 'v'
-    ];
-    
-    if (this._containsAny(lowerTitle, specialPatterns)) {
-      return 'Holofoil';
-    }
-
-    // Check for holofoil and editions
-    if (this._containsAny(lowerTitle, ['holo', 'holographic', 'holofoil'])) {
-      return this._containsAny(lowerTitle, ['first', '1st']) 
-        ? '1st Edition Holofoil' 
-        : 'Holofoil';
-    }
-
-    return this._containsAny(lowerTitle, ['first', '1st']) 
-      ? '1st Edition Normal' 
-      : 'Normal';
-  }
-
-  static determineCondition(title) {
-    const lowerTitle = this._normalizeTitle(title);
-    const conditions = {
-      'NM': ['nm', 'near mint', 'nearmint'],
-      'LP': ['lp', 'light play', 'lightly played'],
-      'MP': ['mp', 'moderate play', 'moderately played'],
-      'HP': ['hp', 'heavy play', 'heavily played', 'damaged']
-    };
-
-    for (const [condition, keywords] of Object.entries(conditions)) {
-      if (this._containsAny(lowerTitle, keywords)) {
-        return condition;
-      }
-    }
-    
-    return 'NM'; // Default condition
-  }
-
-  static _normalizeTitle(title) {
-    return title.toLowerCase()
-      .replace(/[^a-z0-9+\s]/gi, '')
-      .replace(/-/g, ' ')
-      .replace(/\s+/g, ' ')
-      .trim();
-  }
-
-  static _containsAny(text, keywords) {
-    return keywords.some(keyword => text.includes(keyword));
-  }
-
-  static formatDate(dateStr) {
-    const date = new Date(dateStr);
-    return date.toISOString().split('T')[0];
-  }
-}
-
 class ScrapingService {
   constructor() {
-    this.config = EBAY_CONFIG;
+    // You can initialize any configuration here if needed
   }
 
   async scrapeCard(cardData) {
-    let browser = null;
-    try {
-      this._validateCardData(cardData);
-      
-      const searchParams = this._buildSearchParams(cardData);
-      const url = this._constructUrl(searchParams);
-      
-      browser = await this._initializeBrowser();
-      const page = await this._setupPage(browser);
-      
-      await page.goto(url, { 
-        waitUntil: 'networkidle2',
-        timeout: 30000 
-      });
-      
-      const scrapedData = await this._extractListings(page);
-      
-      return {
-        data: scrapedData,
-        source_url: url,
-        timestamp: new Date().toISOString()
-      };
-    } catch (error) {
-      throw new AppError(500, `Scraping failed: ${error.message}`);
-    } finally {
-      if (browser) await browser.close();
+    const { name, number, set_printedTotal, set_name, unique_id } = cardData;
+    const base_url = "https://www.ebay.com/sch/i.html?_from=R40";
+    let exclusions = "-Graded -Grade -PGO -CGC -BGS -PSA -Pick -Singles -Choose -Sealed -Korean -italian -german -signed -Gem";
+    const category = "&_sacat=183454";
+    const title_desc = "&LH_TitleDesc=1";
+    const rt = "&rt=nc";
+    const sold_complete = "&LH_Sold=1&LH_Complete=1";
+
+    // Replace "δ" with "Delta Species" in the name
+    if (name.includes('δ')) {
+      name = name.replace(/δ/g, 'Delta Species');
     }
-  }
 
-  _validateCardData({ name, number, set_printedTotal, set_name, unique_id }) {
-    if (!name || !number || !set_printedTotal || !set_name || !unique_id) {
-      throw new AppError(400, 'Missing required card data parameters');
+    // Split the unique_id and check the suffix
+    const uniqueIdParts = unique_id.split("-");
+    let keywords;
+    if (uniqueIdParts[0].endsWith("jp")) {
+      exclusions += " -English";
+      keywords = `${name} ${set_name} Japanese`; // Exclude number and set_printedTotal, add "Japanese"
+    } else {
+      keywords = `${name} ${number}/${set_printedTotal} ${set_name}`;
     }
-  }
 
-  _buildSearchParams({ name, number, set_printedTotal, set_name, unique_id }) {
-    const isJapanese = unique_id.split("-")[0].endsWith("jp");
-    const normalizedName = name.replace(/δ/g, 'Delta Species');
-
-    return {
-      keywords: isJapanese
-        ? `${normalizedName} ${set_name} Japanese`
-        : `${normalizedName} ${number}/${set_printedTotal} ${set_name}`,
-      exclusions: this._getExclusions(set_name)
-    };
-  }
-
-  _getExclusions(setName) {
-    let exclusions = [...this.config.DEFAULT_EXCLUSIONS];
-    
-    if (setName === "Base") {
-      exclusions.push("1st", "First", "shadowless", "1ed");
-    } else if (setName.includes("jp")) {
-      exclusions.push("1st", "First", "1ed");
+    // Add "1st", "First", and "shadowless" to exclusions if set name is "Base"
+    if (set_name === "Base") {
+      exclusions += " -1st -First -shadowless -1ed ";
+    } else if (set_name.includes("jp")) {
+      exclusions += " -1st -First -1ed";
     }
-    
-    return exclusions.map(term => `-${term}`).join(' ');
-  }
 
-  _constructUrl({ keywords, exclusions }) {
-    const searchQuery = encodeURIComponent(`${keywords} ${exclusions}`);
-    return `${this.config.BASE_URL}&_nkw=${searchQuery}${this.config.CATEGORY}${this.config.TITLE_DESC}${this.config.RT}${this.config.SOLD_COMPLETE}`;
-  }
+    // Construct the final URL
+    const url = `${base_url}&_nkw=${encodeURIComponent(keywords + ' ' + exclusions)}${category}${title_desc}${rt}${sold_complete}`;
+    console.log("Constructed URL:", url);
 
-  async _initializeBrowser() {
-    return await puppeteer.launch({
-      headless: true,
-      args: ['--no-sandbox', '--disable-setuid-sandbox']
-    });
-  }
-
-  async _setupPage(browser) {
+    // Scrape data using Puppeteer
+    const browser = await puppeteer.launch({ headless: true });
     const page = await browser.newPage();
-    await page.setRequestInterception(true);
     
+    // Block unnecessary resources for faster scraping
+    await page.setRequestInterception(true);
     page.on('request', (request) => {
       const resourceType = request.resourceType();
-      ['image', 'stylesheet', 'font'].includes(resourceType)
-        ? request.abort()
-        : request.continue();
+      if (resourceType === 'image' || resourceType === 'stylesheet' || resourceType === 'font') {
+        request.abort();
+      } else {
+        request.continue();
+      }
     });
-    
-    return page;
+
+    await page.goto(url, { waitUntil: 'networkidle2' });
+
+    const scrapedData = await this._extractListings(page);
+
+    await browser.close();
+
+    // Return the data
+    return {
+      data: scrapedData,
+      source_url: url
+    };
   }
 
   async _extractListings(page) {
     return await page.evaluate(() => {
-      const listings = [];
+      const results = [];
       const items = document.querySelectorAll('div.s-item__info.clearfix');
-      
-      // Skip first item (usually an ad) and limit to 10 results
-      for (let i = 1; i < items.length && listings.length < 10; i++) {
+
+      // Skip the first item and get the next 10 items (or less if less than 10 available)
+      for (let i = 1; i < items.length && results.length < 10; i++) {
         const item = items[i];
-        const listing = this._extractListingData(item);
-        if (listing) listings.push(listing);
+        let soldDate = item.querySelector('.s-item__caption--row span span')?.innerText;
+        let itemPrice = item.querySelector('.s-item__price span.POSITIVE')?.innerText;
+        let title = item.querySelector('.s-item__title span[role="heading"]')?.innerText;
+        let listing_url = item.querySelector('.s-item__link')?.href;
+
+        // Clean and format the extracted data
+        if (soldDate) {
+          soldDate = soldDate.replace('Sold ', '');
+        }
+        if (itemPrice) {
+          itemPrice = itemPrice.replace('$', '');
+        }
+
+        if (soldDate && itemPrice && title && listing_url) {
+          results.push({
+            soldDate,
+            itemPrice,
+            title,
+            listing_url
+          });
+        }
       }
-      
-      return listings;
+      return results;
     });
-  }
-
-  _extractListingData(item) {
-    const soldDate = item.querySelector('.s-item__caption--row span span')?.innerText;
-    const itemPrice = item.querySelector('.s-item__price span.POSITIVE')?.innerText;
-    const title = item.querySelector('.s-item__title span[role="heading"]')?.innerText;
-    const listing_url = item.querySelector('.s-item__link')?.href;
-
-    if (!soldDate || !itemPrice || !title || !listing_url) return null;
-
-    return {
-      soldDate: CardDataParser.formatDate(soldDate.replace('Sold ', '')),
-      itemPrice: parseFloat(itemPrice.replace('$', '')),
-      cardboardType: CardDataParser.determineCardboardType(title),
-      condition: CardDataParser.determineCondition(title),
-      title: title.trim(),
-      listing_url
-    };
   }
 }
 

@@ -1,14 +1,7 @@
-const express = require('express');
-const router = express.Router();
 const ScrapingService = require('../services/scrapingService');
 
-/**
- * @route POST /scraping
- * @desc Scrape card data from eBay
- * @access Public
- */
-router.post('/', async (req, res) => {
-    const scrapingService = new ScrapingService();
+const scrapeCardData = async (req, res) => {
+    const scrapingService = new ScrapingService(); // Create an instance of ScrapingService
 
     try {
         const { name, number, set_printedTotal, set_name, unique_id } = req.body;
@@ -20,6 +13,7 @@ router.post('/', async (req, res) => {
             });
         }
 
+        // Call the scrapeCard method from ScrapingService
         const result = await scrapingService.scrapeCard({
             name,
             number,
@@ -40,6 +34,8 @@ router.post('/', async (req, res) => {
             message: error.message
         });
     }
-});
+};
 
-module.exports = router; 
+module.exports = {
+    scrapeCardData
+}; 

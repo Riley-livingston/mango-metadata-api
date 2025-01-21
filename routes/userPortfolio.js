@@ -1,8 +1,6 @@
 const express = require("express");
 const router = express.Router();
-
-// Import the database pool from index.js
-const pool = require("./index").pool;
+const { pool } = require("../utils/database"); // Updated import
 
 router.post("/combined-portfolio-update", (req, res) => {
   console.log(
