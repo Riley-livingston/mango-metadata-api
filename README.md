@@ -210,7 +210,7 @@ This project is licensed under the MIT License - see the [LICENSE.md](LICENSE.md
 
 ## 👥 Authors
 
-- Your Name - Initial work - [YourGithub](https://github.com/yourusername)
+- Riley Livingston - Initial work - [Riley Livingston](https://github.com/riley-livingston)
 
 ## 🙏 Acknowledgments
 
@@ -223,6 +223,5 @@ This project is licensed under the MIT License - see the [LICENSE.md](LICENSE.md
 
 - [ ] Add support for more card games
 - [ ] Implement machine learning for condition detection
-- [ ] Add image recognition capabilities
 - [ ] Expand market data sources
 - [ ] Add real-time price alerts
