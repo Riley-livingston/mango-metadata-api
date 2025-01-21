@@ -176,13 +176,16 @@ project/
 │   └── scrapingController.js
 ├── middleware/       # Custom middleware
 │   └── errorHandler.js
-├── routes/          # API routes
-│   └── scrapingRoutes.js
-├── services/        # Business logic
+├── routes/           # API routes
+│   ├── cardMetadata.js
+│   ├── priceRetrieval.js
+│   ├── scrapingRoutes.js
+│   └── searchLogic.js
+├── services/         # Business logic
 │   └── scrapingService.js
-├── utils/           # Helper functions
+├── utils/            # Helper functions
 │   └── database.js
-└── tests/           # Test files
+└── tests/            # Test files
     └── scraping.test.js
 ```
 
